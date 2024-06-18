@@ -25,6 +25,7 @@ if __name__ == "__main__":
     train_set = load_dataset("data/process/kis_minmax1000.pkl")
     temp = train_set.dataset
     weights = np.where(temp["label"] == 0, len(temp[temp["label"] ==0]) / len(temp), len(temp[temp["label"] ==1]) / len(temp))
+    
     print("데이터 분포 및 길이:")
     print(f"\tTotal: {len(temp)}")
     for cls in temp["label"].unique():

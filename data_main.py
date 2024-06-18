@@ -23,13 +23,13 @@ def main():
     labels = []
     
     for path in tqdm(path_list, total=len(path_list)):
-        # if path == "20240618_선진뷰티사이언스_30min.csv":
-        df = read_data(
-            os.path.abspath(os.path.join(source, path)), 
-            pd.read_csv, 
-            calc_fractal,
-            n=500
-            )
+        if path == "20240618_선진뷰티사이언스.csv":
+            df = read_data(
+                os.path.abspath(os.path.join(source, path)), 
+                pd.read_csv, 
+                calc_fractal,
+                n=500
+                )
             
             # NOTE: calc_fractal 결과 확인용
             # fplt.candle_bull_color = "#ffbbc0"
@@ -41,8 +41,8 @@ def main():
             # f_high = fplt.plot(df["fractal_high"], style="o", color='#ffbcff', width=2.0)
             # f_low = fplt.plot(df["fractal_low"], style="o", color='#00ffbc', width=2.0)
             # fplt.show()
-        # else:
-        #     continue
+        else:
+            continue
         
         result, label, shape, length = create_dataset(df, 1000)
         results.extend(result)

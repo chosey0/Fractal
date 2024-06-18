@@ -6,13 +6,16 @@ from typing import Callable
 
 from interface.dataset import FractalDataset
 
-# TODO: 한국투자증권 HTS에서 다운로드 받은 1분 캔들 데이터만 처리 가능
+# TODO: 한국투자증권 HTS에서 다운로드 받은 캔들 데이터만 처리 가능 (데이터 상 연도가 3개년도가 있는 경우는 고려안함)
 def read_data(path: str, read_function: Callable = pd.read_csv, callback: Callable[[str], None] = print, sep=",", **kwargs):
     
     data = read_function(path, encoding='utf-8', sep=sep, header="infer", engine='python')
     data["시간"] = pd.to_datetime(str(datetime.datetime.now().year) + "/" + data['시간'], format='%Y/%m/%d,%H:%M')
-    prev_year_point = data[data['시간'].dt.month == 1].index[-1]
-    data.loc[prev_year_point+1:, "시간"] = pd.to_datetime(data.loc[prev_year_point+1:, "시간"].dt.strftime(f'{datetime.datetime.now().year - 1}-%m-%d %H%M%S'), format="%Y-%m-%d %H%M%S")
+    try:
+        prev_year_point = data[data['시간'].dt.month == 1].index[-1]
+        data.loc[prev_year_point+1:, "시간"] = pd.to_datetime(data.loc[prev_year_point+1:, "시간"].dt.strftime(f'{datetime.datetime.now().year - 1}-%m-%d %H%M%S'), format="%Y-%m-%d %H%M%S")
+    except IndexError:
+        pass
     
     # 불필요한 문자 제거
     data.replace(",", "", regex=True, inplace=True)
@@ -65,3 +68,39 @@ def load_dataset(path: str, read_function: Callable = pd.read_pickle, sort_targe
     dataset = read_function(path, **kwargs)
     dataset.sort_values(sort_target, inplace=True)
     return FractalDataset(dataset)
+
+# NOTE: 미완성
+def temp_function(df):
+    chunk = []
+    result = []
+    
+    for i, row in df.iterrows():
+        if np.isnan(row.fractal_high) and np.isnan(row.fractal_low):
+            chunk.append(row)
+
+        if not np.isnan(row.fractal_high) or not np.isnan(row.fractal_low):
+            chunk.append(row)
+            chunk_df = pd.DataFrame(chunk)
+
+            # if chunk_df[~np.isnan(chunk_df["fractal_low"])].empty or chunk_df[~np.isnan(chunk_df["fractal_high"])].empty or len(chunk_df) < 3:
+            #     del chunk_df
+
+            #     continue
+
+            if len(chunk_df) < 10:
+                chunk = []
+                del chunk_df
+                continue
+            result.append(chunk_df)
+            chunk = []
+
+            if result == []:
+                if chunk_df.iloc[0].Close < chunk_df.iloc[-1].Close:
+                    label = True
+                else:
+                    label = False
+            else:
+                if np.isnan(chunk_df.iloc[-1].fractal_high): # 하락
+                    label = False
+                elif np.isnan(chunk_df.iloc[-1].fractal_low): # 상승
+                    label = True
