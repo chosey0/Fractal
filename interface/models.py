@@ -5,7 +5,7 @@ class CNN1D(nn.Module):
     def __init__(self, input_size, output_size):
         super(CNN1D, self).__init__()
 
-        self.conv1 = nn.Conv1d(in_channels=4, out_channels=input_size*2, kernel_size=1, padding=0)
+        self.conv1 = nn.Conv1d(in_channels=input_size, out_channels=input_size*2, kernel_size=1, padding=0)
         self.conv2 = nn.Conv1d(in_channels=input_size*2, out_channels=input_size*4, kernel_size=1, padding=0)
         self.conv3 = nn.Conv1d(in_channels=input_size*4, out_channels=input_size*8, kernel_size=1, padding=0)
         self.pool = nn.AdaptiveAvgPool1d(8)

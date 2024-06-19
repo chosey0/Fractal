@@ -21,7 +21,7 @@ def collate(batch):
         lengths.append(use_data.shape[0])
         
         # 확인용
-        df = pd.DataFrame(data=np.frombuffer(buffer, dtype=np.int64).reshape(shape), columns=["Time", "Open", "High", "Low", "Close"])
+        df = pd.DataFrame(data=np.frombuffer(buffer, dtype=np.int64).reshape(shape), columns=["Time", "Open", "High", "Low", "Close", "5", "20", "120"])
         df.index = df["Time"]
         dfs.append(df)
 
