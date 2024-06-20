@@ -42,7 +42,7 @@ def train(epoch,
         if scheduler is not None:
             scheduler.step()
         
-        prob = F.sigmoid(logit)#F.softmax(logit, dim=1)
+        prob = F.softmax(logit, dim=1) #F.sigmoid(logit)
         acc = binary_accuracy(prob.argmax(dim=1), label)
         
         prob_history["low"].extend(prob[:, 0].cpu().tolist())
@@ -53,7 +53,7 @@ def train(epoch,
 
     
     print(f'\n{epoch+1} Epoch Loss: {epoch_loss/len(dataloader)}, Epoch ACC: {epoch_acc/len(dataloader)}')
-    if (epoch+1) % 10 == 0:
+    if (epoch+1) % 5 == 0:
         torch.save(model.state_dict(), os.path.join(save_path, f"{model_name}_{epoch+1}_epoch.pth"))
         print(f"\t{epoch+1} Model Saved")
     

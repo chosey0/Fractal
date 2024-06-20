@@ -13,10 +13,11 @@ import os
 import numpy as np
 from tqdm import tqdm
 import pickle
+from collections import Counter
 
 def main(dataset_name):
-    input_size = 7
-    output_size = 2
+    input_size = 6
+    output_size = 3
 
     model = CNN1D(input_size, output_size)
     criterion = nn.CrossEntropyLoss()
@@ -25,15 +26,20 @@ def main(dataset_name):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
     train_set = load_dataset(f"data/process/{dataset_name}.pkl")
+    
+    # 클래스 불균형 조정
     temp = train_set.dataset
-    weights = np.where(temp["label"] == 0, len(temp[temp["label"] == 0]) / len(temp), len(temp[temp["label"] == 1]) / len(temp))
+    class_weights = {label: len(temp) / count for label, count in Counter(temp["label"]).items()}
+    sample_weights = [class_weights[label] for label in temp["label"].values]
+    norm_weights = np.array(sample_weights) / np.sum(sample_weights)
     
     print("데이터 분포 및 길이:")
     print(f"\tTotal: {len(temp)}")
+    
     for cls in temp["label"].unique():
         print(f"\t{cls}: {len(temp[temp['label'] == cls]) / len(temp)}, {len(temp[temp['label'] == cls])}개")
     
-    train_loader = DataLoader(train_set, collate_fn=collate, batch_size=128, sampler = WeightedRandomSampler(weights, len(weights)))
+    train_loader = DataLoader(train_set, collate_fn=collate, batch_size=128, sampler = WeightedRandomSampler(norm_weights, len(norm_weights)))
     
     model = model.to(device)
     criterion = criterion.to(device)
@@ -44,20 +50,30 @@ def main(dataset_name):
     total_acc = 0
     
     history = {
-        "loss": [],
-        "acc": [],
-        "prob_history": []
+        "info":{
+            "name": dataset_name,
+            "architecture": "CNN1D",
+            "input_size": input_size,
+            "output_size": output_size,
+            "n_epochs": n_epochs,
+            "optimizer": "Adam",
+            "scheduler": "None",
+
+        },
+        "history":{
+            
+        }
     }
     
     model.train()
     for epoch in tqdm(range(n_epochs), total=n_epochs, desc="Train Epoch", position=0, ncols=200):
         epoch_loss, epoch_acc, prob_history = train(epoch, model, criterion, optimizer, train_loader, scheduler=scheduler, save_path="models/saved", model_name = dataset_name, device=device)
-        total_loss += epoch_loss
-        total_acc += epoch_acc
-        history["loss"].append(epoch_loss)
-        history["acc"].append(epoch_acc)
-        history["prob_history"].append(prob_history)
-        print(f'\nTotal Loss: {total_loss/(epoch+1)}, Total ACC: {total_acc/(epoch+1)}')
+
+        history["history"][epoch] = {
+            "loss": epoch_loss,
+            "acc": epoch_acc,
+            "prob_history": prob_history
+        }
     
     # import finplot as fplt
     # for probs in history["prob_history"]:
@@ -68,9 +84,10 @@ def main(dataset_name):
         
     import pandas as pd
     import matplotlib.pyplot as plt
+    import json
+    with open(f"models/saved/{dataset_name}.json", "w") as f:
+        json.dump(history, f, ensure_ascii=False, indent=2)
     
-    history_df = pd.DataFrame(history)
-    history_df.to_pickle(f"models/saved/{dataset_name}_history.pkl")
     
     # plt.subplot(211)
     # plt.plot(history_df["loss"])
@@ -83,5 +100,5 @@ def main(dataset_name):
     
     
 if __name__ == "__main__":
-    main("kis_minmax_day_20")
+    main("kis_day20_ma20120_cls3")
     # model.eval()

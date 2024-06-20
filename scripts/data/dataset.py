@@ -7,9 +7,16 @@ from typing import Callable
 from interface.dataset import FractalDataset
 
 # TODO: 한국투자증권 HTS에서 다운로드 받은 캔들 데이터만 처리 가능 (데이터 상 연도가 3개년도가 있는 경우는 고려안함)
-def read_data(path: str, read_function: Callable = pd.read_csv, callback: Callable[[str], None] = print, sep=",", window_type="min", **kwargs):
+def read_data(
+    path: str, 
+    read_function: Callable = pd.read_csv, 
+    callback: Callable[[str], None] = print, 
+    sep=",", window_type="min",
+    ma=False,
+    **kwargs):
     
     data = read_function(path, encoding='utf-8', sep=sep, header="infer", engine='python')
+    
     if window_type == "min":
         data["시간"] = pd.to_datetime(str(datetime.datetime.now().year) + "/" + data['시간'], format='%Y/%m/%d,%H:%M')
         try:
@@ -30,20 +37,21 @@ def read_data(path: str, read_function: Callable = pd.read_csv, callback: Callab
     data = data[::-1].reset_index(drop=True) # 최근 -> 과거 순에서 과거 -> 최근 순으로 정렬
     data.rename({"시간": "Time", "시가": "Open", "고가": "High", "저가": "Low", "종가": "Close", "거래량": "Volume", "거래대금": "Amount"}, axis=1, inplace=True)
     
-    if window_type == "min":
-        try:
-            data["date_only"] = data["Time"].dt.date
-            ma = read_function(path.split(".")[0] + "_ma.csv", encoding='utf-8', sep=sep, header="infer", engine='python')
-            ma["시간"] = pd.to_datetime(ma["시간"], format="%Y-%m-%d").dt.date
-            ma.replace(",", "", regex=True, inplace=True)
-            ma[["5", "20", "120"]] = ma[["5", "20", "120"]].astype(np.float64)
-            ma.dropna(inplace=True)
+    if ma:
+        if window_type == "min":
+            try:
+                data["date_only"] = data["Time"].dt.date
+                ma = read_function(path.split(".")[0] + "_ma.csv", encoding='utf-8', sep=sep, header="infer", engine='python')
+                ma["시간"] = pd.to_datetime(ma["시간"], format="%Y-%m-%d").dt.date
+                ma.replace(",", "", regex=True, inplace=True)
+                ma[["5", "20", "120"]] = ma[["5", "20", "120"]].astype(np.float64)
+                ma.dropna(inplace=True)
+            
+                data = data.merge(ma[["시간", "5", "20", "120"]], left_on="date_only", right_on="시간", how="left")
+                data.drop(columns=['date_only', '시간'], inplace=True)
+            except FileNotFoundError:
+                return None
         
-            data = data.merge(ma[["시간", "5", "20", "120"]], left_on="date_only", right_on="시간", how="left")
-            data.drop(columns=['date_only', '시간'], inplace=True)
-        except FileNotFoundError:
-            return None
-    
     data.set_index(pd.DatetimeIndex(data["Time"]).as_unit("ms").asi8, inplace=True)
     
     return callback(data, **kwargs)
@@ -62,10 +70,14 @@ def create_dataset(df: pd.DataFrame, use_cols=["Time", "Open", "High", "Low", "C
         label = 0
         chunk_df = df.loc[:idx, use_cols]
         
+        if chunk_df.loc[idx, "20"] < chunk_df.loc[idx, "120"]:
+            label = 2
+            
         if len(chunk_df) > max_len:
             chunk_df = chunk_df[-max_len:]
 
         chunk_df[use_cols] = chunk_df[use_cols].astype(np.int64)
+     
         results.append(chunk_df[use_cols].values.tobytes()) # 시고저종
         labels.append(label)
         shapes.append(chunk_df[use_cols].values.shape)
@@ -75,10 +87,14 @@ def create_dataset(df: pd.DataFrame, use_cols=["Time", "Open", "High", "Low", "C
         label = 1
         chunk_df = df.loc[:idx, use_cols]
         
-        chunk_df[use_cols] = chunk_df[use_cols].astype(np.int64)
+        if chunk_df.loc[idx, "20"] < chunk_df.loc[idx, "120"]:
+            label = 2
+            
         if len(chunk_df) > max_len:
             chunk_df = chunk_df[-max_len:]
             
+        chunk_df[use_cols] = chunk_df[use_cols].astype(np.int64)   
+         
         results.append(chunk_df[use_cols].values.tobytes()) # 시고저종
         labels.append(label)
         shapes.append(chunk_df[use_cols].values.shape)
@@ -126,3 +142,4 @@ def temp_function(df):
                     label = False
                 elif np.isnan(chunk_df.iloc[-1].fractal_low): # 상승
                     label = True
+                    

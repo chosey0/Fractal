@@ -1,0 +1,13 @@
+{
+  "name": "kis_day20_ma20120_cls3",
+  "source_dir": "data/raw/한국투자/day",
+  "source_size": 89,
+  "dataset_size": 38840,
+  "use_cols": ["Time", "Open", "High", "Low", "Close", "20", "120"],
+  "max_len": 20,
+  "cls_ratio": [
+    "0: 0.23290422245108136, 9046개",
+    "1: 0.26166323377960865, 10163개",
+    "2: 0.50543254376931, 19631개"
+  ]
+}

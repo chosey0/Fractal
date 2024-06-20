@@ -7,13 +7,13 @@ from tqdm import tqdm
 import finplot as fplt
 import datetime
 from pyqtgraph.exporters import SVGExporter
-fplt.candle_bull_color = "#ffbbc0"
-fplt.candle_bull_body_color = "#ffbbc0" 
-fplt.candle_bear_color = "#bbc0ff"
-fplt.candle_bear_body_color = "#bbc0ff"
-fplt.display_timezone = datetime.timezone.utc
+from sklearn.preprocessing import minmax_scale, StandardScaler
 
-def main():
+from scripts.utils.view import view_data
+import json
+
+import numpy as np
+def main(dataset_name, use_cols):
     source = "data/raw/한국투자/day"
     path_list = os.listdir(source)
     
@@ -21,7 +21,6 @@ def main():
     shapes = []
     lengths = []
     labels = []
-    
     
     for path in tqdm(path_list, total=len(path_list)):
         if "ma" in path: continue
@@ -35,22 +34,12 @@ def main():
             )
         if df is None: continue    
         # NOTE: calc_fractal 결과 확인용
-        # ax0, ax1 = fplt.create_plot(path, rows=2)
-        # fplt.candlestick_ochl(df[['Open', 'Close', 'High', 'Low']], ax=ax0)
-        # fplt.plot(df["fractal_high"], style="o", color='#ffbcff', width=2.0, ax=ax0)
-        # fplt.plot(df["fractal_low"], style="o", color='#00ffbc', width=2.0, ax=ax0)
-        # fplt.plot(df["5"], color='#973131', width=2.0, ax=ax0)
-        # fplt.plot(df["20"], color='#5A639C', width=2.0, ax=ax0)
-        # fplt.plot(df["120"], color='#A0937D', width=2.0, ax=ax0)
-        # fplt.volume_ocv(df[['Open', 'Close', 'Amount']], ax=ax1)
-        # 가공 데이터 이미지 저장용
-        # def save():
-        #     fplt.screenshot(open(f'img/days/{path.split(".")[0]}.png', 'wb'))
-        # fplt.timer_callback(save, .2, single_shot=True)
-        # fplt.timer_callback(fplt.close, .4, single_shot=True)
-        # fplt.show()
-        
-        result, label, shape, length = create_dataset(df, use_cols=["Time", "Open", "High", "Low", "Close", "5", "20", "120"], max_len=20)
+        # scaler = StandardScaler()
+        # view_data(path, df, save_img=False, other_data=[(df["fractal_high"], "o", "#ffbcff"), (df["fractal_low"], "o", "#00ffbc"), (df["20"], None, "#5A639C"), (df["120"], None, "#A0937D")])
+        # scaled_df = pd.DataFrame(scaler.fit_transform(df[['Open', 'Close', 'High', 'Low', "5", "20", "120"]]), index=df.index, columns=['Open', 'Close', 'High', 'Low', "5", "20", "120"])
+        # view_data(path+"_scaled", scaled_df, save_img=False, other_data=[(scaled_df["20"], None, "#5A639C"), (scaled_df["120"], None, "#A0937D")])
+
+        result, label, shape, length = create_dataset(df, use_cols=use_cols, max_len=20)
         results.extend(result)
         labels.extend(label)
         shapes.extend(shape)
@@ -58,8 +47,19 @@ def main():
         
         
     result_df = pd.DataFrame({"data": results, "label": labels, "shape": shapes, "length":lengths})
-    result_df.to_pickle("data/process/kis_minmax_day_20.pkl")
+    dataset_info = {
+        "name": dataset_name,
+        "source_dir": source,
+        "source_size": len(path_list),
+        "dataset_size": len(result_df),
+        "use_cols": use_cols,
+        "max_len": 20,
+        "cls_ratio": [f"\t{cls}: {len(result_df[result_df['label'] == cls]) / len(result_df)}, {len(result_df[result_df['label'] == cls])}개" for cls in result_df["label"].unique()]
+    }
     
+    result_df.to_pickle(f"data/process/{dataset_name}.pkl")
+    with open(f"data/process/{dataset_name}.json", "w", encoding="utf-8") as f:
+        json.dump(dataset_info, f, ensure_ascii=False, indent=2)
 
 if __name__ == "__main__":
-    main()
+    main("kis_day20_ma20120_cls3", ["Time", "Open", "High", "Low", "Close", "20", "120"])
