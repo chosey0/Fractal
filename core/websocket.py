@@ -3,6 +3,11 @@ import asyncio
 import websockets
 from datetime import datetime, timezone
 import json
+import ccxt.pro as ccxtpro
+import ccxt
+import pandas as pd
+import numpy as np
+import toolz.itertoolz as tz
 
 class WebSocketWorker(QThread):
     message_received = pyqtSignal(list)
@@ -62,7 +67,7 @@ class WebSocketWorker(QThread):
         print(f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} - [Agent] ws_agent.py/receive_and_process 종료')
     
     async def emit_wrapper(self, data):
-        self.message_received.emit(data)
+        self.recv_datastr(data, self.message_received.emit)
     
     async def connect(self):
         async with websockets.connect(self.url, ping_interval=30) as session:
@@ -109,7 +114,25 @@ class WebSocketWorker(QThread):
         await self.session.send(senddata)
         await asyncio.sleep(0.5)
         print(f"Input Command is :{senddata}")
-
+        
+    def recv_datastr(self, recv_data, callback):
+        recv_time, datastr = recv_data
+        recvstr = datastr.split('|')
+        
+        # 수신 데이터의 수량(나노 초 수준의 고빈도 데이터의 경우 여러건이 수신될 수 있음)
+        n_item = int(recvstr[2])
+        
+        # 수신 데이터 전문
+        data = recvstr[-1].split("^")
+        
+        if n_item == 1:
+            # self.data_queue.put(new_data)
+            callback(recv_time, data[0], data[1], data[2])
+            # self.inference(idx, input_data)
+        else:
+            temp = list(tz.partition(len(data)//n_item, data))
+            chunks = [[(recv_time + idx*1e-3)]+list(chunk) for idx, chunk in enumerate(temp)]
+            [callback([chunk[0], chunk[1], chunk[2], chunk[3]]) for chunk in chunks]
 
 # 웹소켓 응답 처리 함수        
 async def response_handler(jsonObject):
@@ -126,3 +149,59 @@ async def response_handler(jsonObject):
             
     else:
         print(f"[WARNING][{datetime.now()}] - Unexpected response format {jsonObject}")
+
+
+
+class UpbitWorker(WebSocketWorker):
+    def __init__(self):
+        super().__init__(None, None)
+        self.exchange = ccxtpro.upbit()
+    
+    def configure_transaction(self, symbol):
+        return None, symbol+"/KRW", None
+    
+    async def connect(self):
+        await self.receive_and_process()
+        
+    async def receive_and_process(self):
+        while True:
+            trade_data = await self.exchange.watch_trades(symbol="ZRO/KRW")
+            
+            code = trade_data["info"]["code"]
+            price = trade_data["info"]["trade_price"]
+            date = trade_data["info"]["trade_date"].replace("-", "")
+            time = trade_data["info"]["trade_time"].replace(":", "")
+            
+            recv_time = datetime.now(tz=timezone.utc).timestamp()
+
+            await self.emit_wrapper([recv_time, code, time, price])
+            
+    def prev_data(self, symbol="BTC/KRW", timeframe='1d'):
+        exchange = ccxt.upbit(config={
+                'apiKey': "RkxRNxRhefbbmhOi5ND2SPFdwBCqxMWpi8r8Ht5U",
+                'secret': "jdx40SDcOQPvY8JPVvbK8JLRbxOCKyrNjuHwsbZ6",
+                'enableRateLimit': True
+            }
+        )
+        ohlcv = exchange.fetch_ohlcv(symbol=symbol, timeframe=timeframe)
+
+        df = pd.DataFrame(ohlcv, columns=['Time', 'Open', 'High', 'Low', 'Close', 'Volume'])
+        pd_ts = pd.to_datetime(df['Time'], utc=True, unit='ms')     # unix timestamp to pandas Timeestamp
+        pd_ts = pd_ts.dt.tz_convert("Asia/Seoul")                       # convert timezone
+        pd_ts = pd_ts.dt.tz_localize(None)
+        df.set_index(pd_ts, inplace=True)
+        df[['Open', 'High', 'Low', 'Close', 'Volume']].reset_index(inplace=True)
+        df["ma20"] = df["Close"].rolling(window=20).mean()
+        df["ma120"] = df["Close"].rolling(window=120).mean()
+
+        df.set_index(pd.DatetimeIndex(df["Time"]).as_unit("ms").asi8, inplace=True)
+    
+        df = df[["Time", "Open", "High", "Low", "Close", "ma20", "ma120"]].dropna()
+        
+        df["low_point"] = [np.nan] * len(df)
+        df["high_point"] = [np.nan] * len(df)
+        df["low_prob"] = [np.nan] * len(df)
+        df["high_prob"] = [np.nan] * len(df)
+        df["none_prob"] = [np.nan] * len(df)
+        
+        return df.to_dict(orient="index")

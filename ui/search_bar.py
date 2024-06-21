@@ -37,7 +37,9 @@ class SearchBar(QWidget):
         layout.addWidget(self.name_input, 0, 0)
 
         self.code_input = QLineEdit()
-        self.code_input.setReadOnly(True)
+        ##################
+        self.code_input.setReadOnly(False)
+        ###################
         layout.addWidget(self.code_input, 0, 1)
 
         # create return button
@@ -49,6 +51,9 @@ class SearchBar(QWidget):
 
     def update_value(self, text):
         if text in self.names:
+            self.code_input.setText(self.names[text])
+        elif text in "/":
+            self.names[text] = text
             self.code_input.setText(self.names[text])
         else:
             self.code_input.clear()
