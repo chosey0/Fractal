@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QGraphicsView, QGridLayout, QWidget
+from PyQt5.QtWidgets import QGraphicsView, QGridLayout, QWidget, QFileDialog
 from PyQt5.QtCore import QThread, pyqtSignal, QObject, pyqtSlot
 import finplot as fplt
 from datetime import datetime, timezone
@@ -23,6 +23,7 @@ fplt.candle_bear_color = "#bbc0ff"
 fplt.candle_bear_body_color = "#bbc0ff"
 fplt.display_timezone = timezone.utc
 
+from tqdm import tqdm
 import threading
 from memory_profiler import profile
 import gc
@@ -35,11 +36,10 @@ class InferThread(QThread):
     update_prob = pyqtSignal(object)
     
     
-    def __init__(self, model, get_data_func, code, name) -> None:
+    def __init__(self, model, code, name) -> None:
         super().__init__()
-        self.get_data_func = get_data_func
-        self.name = name
         self.code = code
+        self.name = name
         
         self.daemon = True
         self.data_queue = Queue()
@@ -49,89 +49,74 @@ class InferThread(QThread):
         self.scaler = StandardScaler()
         self.model = model
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    
-    @pyqtSlot(list)
-    def recv_datastr(self, recv_data):
-        recv_time, datastr = recv_data
-        recvstr = datastr.split('|')
-        
-        # 수신 데이터의 수량(나노 초 수준의 고빈도 데이터의 경우 여러건이 수신될 수 있음)
-        n_item = int(recvstr[2])
-        
-        # 수신 데이터 전문
-        data = recvstr[-1].split("^")
-        
-        if n_item == 1:
-            new_data = [recv_time] + data
-            # self.data_queue.put(new_data)
-            self.calc_candle(new_data)
-            # self.inference(idx, input_data)
-        else:
-            temp = list(tz.partition(len(data)//n_item, data))
-            chunks = [[(recv_time + idx*1e-3)]+list(chunk) for idx, chunk in enumerate(temp)]
-            [self.calc_candle(chunk) for chunk in chunks]
-                # self.data_queue.put(chunk)
                 
-                # self.inference(idx, input_data)
     @pyqtSlot(list)
     def calc_candle(self, message):
         
         time, m_price = message
-        dt = pd.to_datetime(str(datetime.now().date())+ " " + time, format='%Y-%m-%d %H%M%S').replace(hour=0, minute=0, second=0, microsecond=0)
+        dt = pd.to_datetime(str(datetime.now().date())+ " " + time, format='%Y-%m-%d %H%M%S').replace(second=0, microsecond=0)
         idx_dt = pd.DatetimeIndex([dt]).as_unit("ms").asi8[0]
-        # dt = datetime.fromtimestamp(data[0]).replace(hour=0, minute=0, second=0, microsecond=0)
         price = float(m_price)
         
         if not idx_dt in list(self.df.keys()):
-            new_row = {
-                idx_dt: {
+            if not hasattr(self, "df"):
+                self.df = {
+                    idx_dt:{
+                            "Time": dt, 
+                            "Open": price, "Close": price, "High": price, "Low": price, 
+                            "ma20": np.nan, "ma120": np.nan, 
+                            "low_point":np.nan, "high_point":np.nan
+                        }
+                    }
+            else:
+                self.df[idx_dt] = {
                         "Time": dt, 
                         "Open": price, "Close": price, "High": price, "Low": price, 
                         "ma20": np.nan, "ma120": np.nan, 
                         "low_point":np.nan, "high_point":np.nan
                     }
-                }
-            if not hasattr(self, "df"):
-                self.df = new_row
-            else:
-                self.df[idx_dt] = new_row[idx_dt]
+                self.update_candle.emit(self.df)
+                self.live_queue.put([idx_dt, np.array([[self.df[key]["Open"], self.df[key]["High"], self.df[key]["Low"], self.df[key]["Close"], self.df[key]["ma20"], self.df[key]["ma120"]] for key in list(self.df.keys())[-20:]])])
                 
         elif idx_dt in self.df.keys():
             if self.df[idx_dt]["Close"] != price:
                 self.df[idx_dt]["Close"] = price
                 self.df[idx_dt]["ma20"] = np.mean([self.df[key]["Close"] for key in list(self.df.keys())[-20:]])
                 self.df[idx_dt]["ma120"] = np.mean([self.df[key]["Close"] for key in list(self.df.keys())[-120:]])
+                self.update_candle.emit(self.df)
+                self.live_queue.put([idx_dt, np.array([[self.df[key]["Open"], self.df[key]["High"], self.df[key]["Low"], self.df[key]["Close"], self.df[key]["ma20"], self.df[key]["ma120"]] for key in list(self.df.keys())[-20:]])])
             elif self.df[idx_dt]["High"] < price:
                 self.df[idx_dt]["High"] = price
+                self.update_candle.emit(self.df)
+                self.live_queue.put([idx_dt, np.array([[self.df[key]["Open"], self.df[key]["High"], self.df[key]["Low"], self.df[key]["Close"], self.df[key]["ma20"], self.df[key]["ma120"]] for key in list(self.df.keys())[-20:]])])
             elif self.df[idx_dt]["Low"] > price:
                 self.df[idx_dt]["Low"] = price
-        
                 self.update_candle.emit(self.df)
-                self.live_queue.put([idx_dt, np.array([[self.df[key]["Open"], self.df[key]["High"], self.df[key]["Low"], self.df[key]["Close"], self.df[key]["ma20"], self.df[key]["ma120"]] for key in self.df.keys()[-20:]])])
-    
-    
+                self.live_queue.put([idx_dt, np.array([[self.df[key]["Open"], self.df[key]["High"], self.df[key]["Low"], self.df[key]["Close"], self.df[key]["ma20"], self.df[key]["ma120"]] for key in list(self.df.keys())[-20:]])])
+
     def run(self):
-        self.df = self.get_previous_data(self.get_data_func, self.code, self.previous_data_handler)
+        self.df = self.get_previous_min_candle(self.name)
         self.init_candle.emit(self.df)
         self.prev_inference()
         self.inference_loop()
     
-    
     def prev_inference(self):
+
         with torch.no_grad():
-            for idx, dt in enumerate(self.df.keys()):
-                data = np.array([[self.df[key]["Open"], self.df[key]["High"], self.df[key]["Low"], self.df[key]["Close"], self.df[key]["ma20"], self.df[key]["ma120"]] for key in self.df.keys() if key < dt])
+            for idx, dt in tqdm(enumerate(list(self.df.keys())), total=len(self.df),desc=f"{self.name} prev inference"):
+                
+                data = np.array([[self.df[key]["Open"], self.df[key]["High"], self.df[key]["Low"], self.df[key]["Close"], self.df[key]["ma20"], self.df[key]["ma120"]] for key in list(self.df.keys()) if key < dt])
+                
                 # data = self.df.loc[:dt, ["Open", "High", "Low", "Close", "ma20", "ma120"]]
                 if len(data) < 2:
                     continue
                 elif len(data) > 20:
                     data = data[-20:, :]
-
                 input_data = torch.tensor(self.scaler.fit_transform(data), device=self.device, dtype=torch.float32)
-        
+                
                 if len(input_data.size()) == 2:
                     input_data = input_data.unsqueeze(0)
-                    
+                
                 logit = self.model(input_data)
                 prob = F.softmax(logit, dim=1).flatten()
                 
@@ -145,7 +130,6 @@ class InferThread(QThread):
                     self.df[dt]["high_point"] = self.df[dt]["High"]
                 else:
                     pass
-
                 
             self.update_prob.emit(self.df)
             self.inference_loop()
@@ -154,6 +138,7 @@ class InferThread(QThread):
         while True:
             if not self.live_queue.empty():
                 dt, data = self.live_queue.get()
+                
                 input_data = torch.tensor(self.scaler.fit_transform(data), device=self.device, dtype=torch.float32)
         
                 if len(input_data.size()) == 2:
@@ -172,13 +157,23 @@ class InferThread(QThread):
                     self.df[dt]["high_point"] = self.df[dt]["High"]
                 else:
                     pass
-                
                 self.update_prob.emit(self.df)
+                self.live_queue.task_done()
             else:
                 time.sleep(0.001)
+
+    def get_previous_min_candle(self, name):
+        try:
+            data = pd.read_csv(r"data/prev/"+name+".csv", encoding='utf-8', sep=",", header="infer", engine='python')
+            data.replace(",", "", regex=True, inplace=True)
+            data.rename({"시간": "Time", "시가": "Open", "고가": "High", "저가": "Low", "종가": "Close"}, axis=1, inplace=True)
+            data["Time"] = datetime.now().strftime("%Y") + data["Time"]
+            data = data[::-1]
+            return self.previous_data_handler(data, "%Y%m/%d%H:%M")
+        except Exception as e:  
+            print(f"Failed to load data: {e}")
                 
-    def get_previous_data(self, get_data_func, code, data_handler):
-        
+    def get_previous_data(self, get_data_func, code):
         prev_data = []
         FID_INPUT_DATE_2 = datetime.now()
         res = get_data_func(code, FID_INPUT_DATE_2=FID_INPUT_DATE_2)
@@ -194,14 +189,15 @@ class InferThread(QThread):
         df = pd.DataFrame(prev_data)[::-1].reset_index(drop=True)
         df.rename({"stck_bsop_date": "Time", "stck_clpr": "Close", "stck_oprc": "Open", "stck_hgpr": "High", "stck_lwpr": "Low"}, axis=1, inplace=True)
         
-        return data_handler(df)
-
-    def previous_data_handler(self, df):
+        return self.previous_data_handler(df, "%Y%m%d")
+    
+    def previous_data_handler(self, df, format):
+        
         df[["Open", "High", "Low", "Close"]] = df[["Open", "High", "Low", "Close"]].astype(np.int64)
         
         df["ma20"] = df["Close"].rolling(window=20).mean()
         df["ma120"] = df["Close"].rolling(window=120).mean()
-        df["Time"] = pd.to_datetime(df['Time'], format='%Y%m%d')
+        df["Time"] = pd.to_datetime(df['Time'], format=format)
         
         df.set_index(pd.DatetimeIndex(df["Time"]).as_unit("ms").asi8, inplace=True)
         
@@ -213,7 +209,7 @@ class InferThread(QThread):
         df["high_prob"] = [np.nan] * len(df)
         df["none_prob"] = [np.nan] * len(df)
 
-        return df.to_dict(orient="index")
+        return df.iloc[-200:].to_dict(orient="index")
         
 class InferWindow(QWidget):
     def __init__(self, code, name):

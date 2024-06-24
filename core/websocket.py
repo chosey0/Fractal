@@ -127,7 +127,8 @@ class WebSocketWorker(QThread):
         
         if n_item == 1:
             # self.data_queue.put(new_data)
-            callback(recv_time, data[0], data[1], data[2])
+            # systime, code, time, price
+            callback([recv_time, data[0], data[1], data[2]])
             # self.inference(idx, input_data)
         else:
             temp = list(tz.partition(len(data)//n_item, data))

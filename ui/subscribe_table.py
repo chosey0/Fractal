@@ -1,7 +1,9 @@
 from PyQt5.QtWidgets import QTableWidget, QAbstractItemView, QHeaderView, QTableWidgetItem, QMenu, QAction
 from PyQt5.QtCore import pyqtSignal, Qt
-from ui.infer_plot import InferWindow, InferThread
-from memory_profiler import profile
+# 일봉
+# from ui.infer_plot import InferWindow, InferThread
+# 분봉
+from ui.infer_plot_min import InferWindow, InferThread
 
 class SubscribeTable(QTableWidget):
     subscribe_signal = pyqtSignal(str, str)
@@ -25,7 +27,10 @@ class SubscribeTable(QTableWidget):
         tr_id, message, disconnect_message = self.add_callback(code)
         
         infer_window = InferWindow(code, name)
-        infer_thread = InferThread(self.parent.model, self.parent.agent.day_candle, code)
+        # 일봉
+        # infer_thread = InferThread(self.parent.model, self.parent.agent.day_candle, code, name)
+        # 분봉
+        infer_thread = InferThread(self.parent.model, code, name)
         
         infer_thread.init_candle.connect(infer_window.init_candle)
         infer_thread.update_candle.connect(infer_window.update_candle)

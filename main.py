@@ -1,5 +1,5 @@
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QTextEdit, QVBoxLayout, QWidget, QPushButton, QGridLayout, QTableWidget, QAbstractItemView, QHeaderView, QTableWidgetItem
+from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QGridLayout
 from PyQt5.QtCore import pyqtSlot
 from core.agent import Agent
 from core.websocket import WebSocketWorker
@@ -42,12 +42,10 @@ class MyApp(QMainWindow):
 
     @pyqtSlot(list)
     def on_message_received(self, message):
-        recv_time, dataStr = message
-        code = dataStr[15:21]
-        
+        systime, code, time, price = message
         if code in self.subscribe_table.subscribe_list:
             if hasattr(self.subscribe_table.subscribe_list[code]["infer_thread"], "df"):
-                self.subscribe_table.subscribe_list[code]["infer_thread"].live_recv.emit(message)   
+                self.subscribe_table.subscribe_list[code]["infer_thread"].live_recv.emit([time, price])   
         
     def search(self):
         if "KRW" in self.search_bar.name_input.text():
@@ -71,7 +69,6 @@ class MyApp(QMainWindow):
                 return
             else:
                 self.subscribe_table.add_subscribe(name, code)
-                
 
 
 if __name__ == '__main__':
