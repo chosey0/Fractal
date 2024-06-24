@@ -46,6 +46,8 @@ class MyApp(QMainWindow):
         if code in self.subscribe_table.subscribe_list:
             if hasattr(self.subscribe_table.subscribe_list[code]["infer_thread"], "df"):
                 self.subscribe_table.subscribe_list[code]["infer_thread"].live_recv.emit([time, price])   
+            if hasattr(self.subscribe_table.subscribe_list[code]["infer_min"], "df"):
+                self.subscribe_table.subscribe_list[code]["infer_min"].live_recv.emit([time, price])
         
     def search(self):
         if "KRW" in self.search_bar.name_input.text():

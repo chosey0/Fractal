@@ -1,9 +1,9 @@
 from PyQt5.QtWidgets import QTableWidget, QAbstractItemView, QHeaderView, QTableWidgetItem, QMenu, QAction
 from PyQt5.QtCore import pyqtSignal, Qt
 # 일봉
-# from ui.infer_plot import InferWindow, InferThread
+from ui.infer_plot import InferWindow, InferThread
 # 분봉
-from ui.infer_plot_min import InferWindow, InferThread
+from ui.infer_plot_min import InferMinWindow
 
 class SubscribeTable(QTableWidget):
     subscribe_signal = pyqtSignal(str, str)
@@ -28,9 +28,8 @@ class SubscribeTable(QTableWidget):
         
         infer_window = InferWindow(code, name)
         # 일봉
-        # infer_thread = InferThread(self.parent.model, self.parent.agent.day_candle, code, name)
+        infer_thread = InferThread(self.parent.model, self.parent.agent.day_candle, code, name)
         # 분봉
-        infer_thread = InferThread(self.parent.model, code, name)
         
         infer_thread.init_candle.connect(infer_window.init_candle)
         infer_thread.update_candle.connect(infer_window.update_candle)
@@ -42,8 +41,10 @@ class SubscribeTable(QTableWidget):
             "message": message, 
             "disconnect_message": disconnect_message, 
             "infer_window": infer_window,
-            "infer_thread": infer_thread
+            "infer_thread": infer_thread,
+            "infer_min": InferMinWindow(self.parent.model, code, name)
             }
+        
         self.subscribe_list[code]["infer_thread"].start()
         self.setRowCount(len(self.subscribe_list))
         
@@ -68,9 +69,11 @@ class SubscribeTable(QTableWidget):
         context_menu = QMenu(self)
         del_action = QAction('삭제', self)
         open_action = QAction('차트 열기', self)
+        min_action = QAction('분봉', self)
         
         context_menu.addAction(del_action)
         context_menu.addAction(open_action)
+        context_menu.addAction(min_action)
         
         action = context_menu.exec_(self.mapToGlobal(event.pos()))
         
@@ -78,7 +81,13 @@ class SubscribeTable(QTableWidget):
             self.delete_row(self.currentRow(), self.currentColumn())
         if action == open_action:
             self.open_plot(self.currentRow(), self.currentColumn())
+        if action == min_action:
+            self.open_min_table(self.currentRow(), self.currentColumn())
     
     def open_plot(self, row, column):
         code = self.item(row, column).data(Qt.UserRole)
         self.subscribe_list[code]["infer_window"].show()
+        
+    def open_min_table(self, row, column):
+        code = self.item(row, column).data(Qt.UserRole)
+        self.subscribe_list[code]["infer_min"].show()

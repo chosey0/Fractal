@@ -36,7 +36,7 @@ class WebSocketWorker(QThread):
                 if not self.config_message_queue.empty():
                     sendmsg = await self.config_message_queue.get()
                     await self.subscribe_func(sendmsg)
-                    
+
                 data = await self.session.recv()
                 recv_time = datetime.now(tz=timezone.utc).timestamp()
                 

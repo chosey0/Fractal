@@ -23,11 +23,6 @@ fplt.candle_bear_color = "#bbc0ff"
 fplt.candle_bear_body_color = "#bbc0ff"
 fplt.display_timezone = timezone.utc
 
-import threading
-from memory_profiler import profile
-import gc
-from torchinfo import summary
-import psutil
 class InferThread(QThread):
     init_candle = pyqtSignal(object)
     update_candle = pyqtSignal(object)
@@ -49,30 +44,7 @@ class InferThread(QThread):
         self.scaler = StandardScaler()
         self.model = model
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    
-    @pyqtSlot(list)
-    def recv_datastr(self, recv_data):
-        recv_time, datastr = recv_data
-        recvstr = datastr.split('|')
-        
-        # 수신 데이터의 수량(나노 초 수준의 고빈도 데이터의 경우 여러건이 수신될 수 있음)
-        n_item = int(recvstr[2])
-        
-        # 수신 데이터 전문
-        data = recvstr[-1].split("^")
-        
-        if n_item == 1:
-            new_data = [recv_time] + data
-            # self.data_queue.put(new_data)
-            self.calc_candle(new_data)
-            # self.inference(idx, input_data)
-        else:
-            temp = list(tz.partition(len(data)//n_item, data))
-            chunks = [[(recv_time + idx*1e-3)]+list(chunk) for idx, chunk in enumerate(temp)]
-            [self.calc_candle(chunk) for chunk in chunks]
-                # self.data_queue.put(chunk)
                 
-                # self.inference(idx, input_data)
     @pyqtSlot(list)
     def calc_candle(self, message):
         
@@ -186,10 +158,13 @@ class InferThread(QThread):
         
         # NOTE: 최근 상장된 종목 예외처리 추가하기
         for _ in range(5):
-            time.sleep(0.5)
-            FID_INPUT_DATE_2 = datetime.strptime(res.json()["output2"][-1]["stck_bsop_date"], "%Y%m%d")
-            res = get_data_func(code, FID_INPUT_DATE_2=FID_INPUT_DATE_2)
-            prev_data.extend(res.json()["output2"][:-1])
+            try:
+                time.sleep(0.5)
+                FID_INPUT_DATE_2 = datetime.strptime(res.json()["output2"][-1]["stck_bsop_date"], "%Y%m%d")
+                res = get_data_func(code, FID_INPUT_DATE_2=FID_INPUT_DATE_2)
+                prev_data.extend(res.json()["output2"][:-1])
+            except:
+                break
             
         df = pd.DataFrame(prev_data)[::-1].reset_index(drop=True)
         df.rename({"stck_bsop_date": "Time", "stck_clpr": "Close", "stck_oprc": "Open", "stck_hgpr": "High", "stck_lwpr": "Low"}, axis=1, inplace=True)
@@ -197,6 +172,7 @@ class InferThread(QThread):
         return data_handler(df)
 
     def previous_data_handler(self, df):
+        print(df)
         df[["Open", "High", "Low", "Close"]] = df[["Open", "High", "Low", "Close"]].astype(np.int64)
         
         df["ma20"] = df["Close"].rolling(window=20).mean()
