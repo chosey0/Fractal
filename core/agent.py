@@ -88,7 +88,7 @@ class Agent(KoreaInvestments):
         approval_key = res.json()["approval_key"]
         print(f"{datetime.now()} - {self.name} - Approval Response Status: {res.status_code}")
         print(f"\tResponse URL: {res.url}")
-
+        
         return approval_key
     
 

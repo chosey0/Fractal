@@ -3,8 +3,9 @@ import yaml
 import json
 
 import pandas as pd
-import time
 import numpy as np
+from core.api.ebest.auth import read_token
+
 def TickRequest(name,
                 stockcode, 
                 size: int, 
@@ -39,15 +40,24 @@ def TickRequest(name,
             "comp_yn": 'N'
         }
     }
+    try:
+        res = req.post(URL, headers=headers, data=json.dumps(body))
     
-    res = req.post(URL, headers=headers, data=json.dumps(body))
-    return res.json()["t8412OutBlock"], res.json()["t8412OutBlock1"], res.json()["rsp_cd"]
+        if res.json()["rsp_cd"] == 'IGW00121':
+            headers["authorization"] = read_token("EBEST")
+            res = req.post(URL, headers=headers, data=json.dumps(body))
+            
+        return res.json()["t8412OutBlock"], res.json()["t8412OutBlock1"], res.json()["rsp_cd"]
+    except Exception as e:
+        print(e)
+        return None, None, None
 
 def data_handler(data):
+
     df = pd.DataFrame(data)[["date", "time", "open", "high", "low", "close", "jdiff_vol"]]
     df["Time"] = pd.to_datetime(df["date"] + df["time"], format="%Y%m%d%H%M%S")
-    df.drop(["date", "time"], axis=1, inplace=True)
-    df.rename({"open": "Open", "high": "High", "low": "Low", "close": "Close", "jdiff_vol": "Volume"}, axis=1, inplace=True)
+    df.drop(["date", "time", "jdiff_vol"], axis=1, inplace=True)
+    df.rename({"open": "Open", "high": "High", "low": "Low", "close": "Close"}, axis=1, inplace=True)
     df["ma20"] = df["Close"].rolling(window=20).mean()
     df["ma120"] = df["Close"].rolling(window=120).mean()
     df.dropna(inplace=True)
@@ -58,4 +68,5 @@ def data_handler(data):
     df["high_prob"] = [np.nan] * len(df)
     df["none_prob"] = [np.nan] * len(df)
     df.set_index(pd.DatetimeIndex(df["Time"]).as_unit("ms").asi8, inplace=True)
-    return df
+    df[["Open", "Close", "High", "Low"]] = df[["Open", "Close", "High", "Low"]].astype(np.float64)
+    return df[["Time", "Open", "Close", "High", "Low", "ma20", "ma120", "low_point", "high_point", "low_prob", "high_prob", "none_prob"]]

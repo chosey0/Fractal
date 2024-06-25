@@ -22,14 +22,17 @@ def test(df: pd.DataFrame,
           device = torch.device('cuda' if torch.cuda.is_available() else 'cpu'),
           prob_history = {},
           max_len = 2000):
+    
     color_map = {
         "low": "#973131",
         "high": "#5A639C",
         "None": "#A0937D"
     }
+    
     for i in tqdm(range(len(df)), total=len(df), desc="Test Loop", position=1, leave=False, ncols=200):
         data = df[["Open", "High", "Low", "Close", "20", "120"]].iloc[:i]
         
+        # 모델 제한으로 2개 이상의 데이터 필요
         if data.empty or len(data) < 2:
             continue
         elif len(data) > max_len:
@@ -40,10 +43,6 @@ def test(df: pd.DataFrame,
         if len(input_data.size()) == 2:
             input_data = input_data.unsqueeze(0)
         # input_data = ((torch.roll(data, shifts=-1, dims=0) - data) / data * 100)[:-1, :].unsqueeze(0).to(torch.float32)
-        
-        # # 모델 제한으로 2개 이상의 데이터 필요
-        # if input_data.size()[1] > max_len:
-        #     input_data = input_data[:, -max_len:, :]
         
         logit = model(input_data)
         prob = F.softmax(logit, dim=1).flatten()# F.sigmoid(logit).flatten()

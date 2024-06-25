@@ -27,9 +27,7 @@ class SubscribeTable(QTableWidget):
         tr_id, message, disconnect_message = self.add_callback(code)
         
         infer_window = InferWindow(code, name)
-        # 일봉
         infer_thread = InferThread(self.parent.model, self.parent.agent.day_candle, code, name)
-        # 분봉
         
         infer_thread.init_candle.connect(infer_window.init_candle)
         infer_thread.update_candle.connect(infer_window.update_candle)

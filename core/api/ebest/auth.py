@@ -1,7 +1,6 @@
 import requests as req
 import yaml
-import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 def get_access_token(name, update=False):
     with open("env.yaml", encoding='UTF-8') as f:
@@ -66,5 +65,3 @@ def read_token(name):
         return get_access_token(name, update=True)
 
     return token
-
-read_token("EBEST")

@@ -42,12 +42,19 @@ class MyApp(QMainWindow):
 
     @pyqtSlot(list)
     def on_message_received(self, message):
+        """_summary_
+
+        Args:
+            message (_type_): 웹소켓 수신 메세지 처리
+            TODO: 메세지는 웹소켓 클라이언트에서 수신한 시스템 시간, 종목코드, 체결시간, 가격으로 분리되어 보내짐
+            View나 추론으로 넘길 때, 체결 시간, 가격만 넘겨주는 역할, 나머지는 넘겨받은 곳에서 알아서 처리
+        """
         systime, code, time, price = message
         if code in self.subscribe_table.subscribe_list:
             if hasattr(self.subscribe_table.subscribe_list[code]["infer_thread"], "df"):
-                self.subscribe_table.subscribe_list[code]["infer_thread"].live_recv.emit([time, price])   
+                self.subscribe_table.subscribe_list[code]["infer_thread"].live_recv.emit([time, float(price)])   
             if hasattr(self.subscribe_table.subscribe_list[code]["infer_min"], "df"):
-                self.subscribe_table.subscribe_list[code]["infer_min"].live_recv.emit([time, price])
+                self.subscribe_table.subscribe_list[code]["infer_min"].live_recv.emit([time, float(price)])
         
     def search(self):
         if "KRW" in self.search_bar.name_input.text():
@@ -74,7 +81,7 @@ class MyApp(QMainWindow):
 
 
 if __name__ == '__main__':
-    agent = Agent("simulation", "env.yaml")
+    agent = Agent("real", "env.yaml")
     websocket_worker = WebSocketWorker(agent.name, agent.get_approval())
     app = QApplication(sys.argv)
     window = MyApp(agent, websocket_worker)

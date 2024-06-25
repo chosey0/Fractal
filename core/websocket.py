@@ -16,7 +16,7 @@ class WebSocketWorker(QThread):
         super().__init__()
         self.loop = asyncio.new_event_loop()
         self.name = name
-        
+        self.setObjectName(name)
         self.config_message_queue = asyncio.Queue()
         self._approval = approval
         
@@ -25,19 +25,19 @@ class WebSocketWorker(QThread):
         elif self.name == "simulation":
             self.url = "ws://ops.koreainvestment.com:31000"
         
-    async def receive_and_process(self):
+    async def receive_and_process(self, session):
         print(f'{datetime.now()} - {self.name} - ws_agent.py/receive_and_process - Websocket Connected')
-        print(f"\tSession Host: {self.session.host}")
-        print(f"\tSession Port: {self.session.port}")
+        print(f"\tSession Host: {session.host}")
+        print(f"\tSession Port: {session.port}")
         print(f"\tAgent Websocket URL: {self.url}")
 
         while True:
             try:
                 if not self.config_message_queue.empty():
                     sendmsg = await self.config_message_queue.get()
-                    await self.subscribe_func(sendmsg)
+                    await self.subscribe_func(session, sendmsg)
 
-                data = await self.session.recv()
+                data = await session.recv()
                 recv_time = datetime.now(tz=timezone.utc).timestamp()
                 
                 if data[0] == '0':
@@ -52,13 +52,14 @@ class WebSocketWorker(QThread):
                     
                     if trid == "PINGPONG":
                         print(f"[PINGPONG RECV][{datetime.now()}] - [{data}]")
-                        await self.session.pong(data)
-                    # else:
-                    #     await response_handler(jsonObject)
+                        await session.pong(data)
+                    else:
+                        await response_handler(jsonObject)
                 
             except websockets.ConnectionClosed as e:
                 print(f"[Error][{datetime.now()}] - Connection closed: {e}")
                 break
+                # continue
             
             except Exception as e:
                 print(f"[Error][{datetime.now()}] - {e}")
@@ -73,8 +74,7 @@ class WebSocketWorker(QThread):
         async with websockets.connect(self.url, ping_interval=30) as session:
             # await self.subscribe_func(session)
             self.session = session
-            await self.receive_and_process()
-    
+            await self.receive_and_process(session)
         
     def run(self):
         asyncio.set_event_loop(self.loop)
@@ -109,9 +109,9 @@ class WebSocketWorker(QThread):
             
             
 # 구독 등록/해제 요청 함수
-    async def subscribe_func(self, senddata):
+    async def subscribe_func(self, session, senddata):
         # for senddata in self.sendlist:
-        await self.session.send(senddata)
+        await session.send(senddata)
         await asyncio.sleep(0.5)
         print(f"Input Command is :{senddata}")
         
@@ -126,10 +126,7 @@ class WebSocketWorker(QThread):
         data = recvstr[-1].split("^")
         
         if n_item == 1:
-            # self.data_queue.put(new_data)
-            # systime, code, time, price
             callback([recv_time, data[0], data[1], data[2]])
-            # self.inference(idx, input_data)
         else:
             temp = list(tz.partition(len(data)//n_item, data))
             chunks = [[(recv_time + idx*1e-3)]+list(chunk) for idx, chunk in enumerate(temp)]

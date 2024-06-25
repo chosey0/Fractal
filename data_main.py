@@ -4,11 +4,6 @@ from scripts.data.fractal_indicator import calc_fractal
 import pandas as pd
 from tqdm import tqdm
 
-import finplot as fplt
-import datetime
-from pyqtgraph.exporters import SVGExporter
-from sklearn.preprocessing import minmax_scale, StandardScaler
-
 from scripts.utils.view import view_data
 import json
 

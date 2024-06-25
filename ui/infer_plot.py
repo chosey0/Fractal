@@ -1,21 +1,19 @@
+# TODO: infer_plot_min과 같이 수정하기
+
 from PyQt5.QtWidgets import QGraphicsView, QGridLayout, QWidget
-from PyQt5.QtCore import QThread, pyqtSignal, QObject, pyqtSlot
+from PyQt5.QtCore import QThread, pyqtSignal, pyqtSlot
 import finplot as fplt
 from datetime import datetime, timezone
 
 import torch
-import torch.nn as nn
 from torch.nn import functional as F
 
 import time
 import pandas as pd
 import numpy as np
 
-from interface.models import CNN1D
-from sklearn.preprocessing import minmax_scale, StandardScaler
-import toolz.itertoolz as tz
+from sklearn.preprocessing import StandardScaler
 from queue import Queue
-import cupy as cp
 
 fplt.candle_bull_color = "#ffbbc0"
 fplt.candle_bull_body_color = "#ffbbc0" 
@@ -39,14 +37,14 @@ class InferThread(QThread):
         self.daemon = True
         self.data_queue = Queue()
         self.live_queue = Queue()
-        self.live_recv.connect(self.calc_candle)
+        self.live_recv.connect(self.update_candle_df)
         
         self.scaler = StandardScaler()
         self.model = model
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
                 
     @pyqtSlot(list)
-    def calc_candle(self, message):
+    def update_candle_df(self, message):
         
         time, m_price = message
         dt = pd.to_datetime(str(datetime.now().date())+ " " + time, format='%Y-%m-%d %H%M%S').replace(hour=0, minute=0, second=0, microsecond=0)
@@ -172,8 +170,7 @@ class InferThread(QThread):
         return data_handler(df)
 
     def previous_data_handler(self, df):
-        print(df)
-        df[["Open", "High", "Low", "Close"]] = df[["Open", "High", "Low", "Close"]].astype(np.int64)
+        df[["Open", "High", "Low", "Close"]] = df[["Open", "High", "Low", "Close"]].astype(np.float64)
         
         df["ma20"] = df["Close"].rolling(window=20).mean()
         df["ma120"] = df["Close"].rolling(window=120).mean()

@@ -88,15 +88,7 @@ def main(dataset_name):
     with open(f"models/saved/{dataset_name}.json", "w") as f:
         json.dump(history, f, ensure_ascii=False, indent=2)
     
-    
-    # plt.subplot(211)
-    # plt.plot(history_df["loss"])
-    # plt.title("Loss")
-    
-    # plt.subplot(212)
-    # plt.plot(history_df["acc"])
-    # plt.title("ACC")
-    # plt.show()
+
     
     
 if __name__ == "__main__":
